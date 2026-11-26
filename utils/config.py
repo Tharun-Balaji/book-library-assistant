@@ -1,18 +1,20 @@
-import os
+from pathlib import Path
 
 def load_system_prompt():
     """Load the system prompt from prompt.txt file."""
-    # TODO: Get the path to prompt.txt file in the directory
-    # TODO: Open and read the prompt file with proper encoding (utf-8)
-    # TODO: Return the content stripped of whitespace
-    # TODO: Handle FileNotFoundError with appropriate message: "prompt.txt file not found. Please ensure it exists in the project directory"
-    # TODO: Handle other exceptions with appropriate message: "Error loading prompt.txt: {error_message}"
-    pass
+    prompt_path = Path(__file__).resolve().parent.parent / "prompt.txt"
+    try:
+        return prompt_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            "prompt.txt file not found. Please ensure it exists in the project directory"
+        ) from error
+    except Exception as error:
+        raise RuntimeError(f"Error loading prompt.txt: {error}") from error
 
 def get_system_prompt():
     """Get the system prompt for the library assistant."""
-    # TODO: Call load_system_prompt() and return the result
-    pass
+    return load_system_prompt()
 
 # Mock library database for demonstration
 LIBRARY_DATA = {
@@ -66,13 +68,14 @@ LIBRARY_DATA = {
 def search_books(query, genre=None, max_results=10):
     """Function to search books"""
     results = []
-    query_lower = query.lower()
+    query_lower = query.lower().replace("_", " ")
     
     for book_id, book in LIBRARY_DATA["books"].items():
         # Check if query matches title, author, or description
         if (query_lower in book["title"].lower() or 
             query_lower in book["author"].lower() or 
-            query_lower in book["description"].lower()):
+            query_lower in book["description"].lower() or
+            query_lower in book["genre"].lower().replace("_", " ")):
             
             # Filter by genre if specified
             if genre is None or book["genre"] == genre:
@@ -109,11 +112,15 @@ def manage_reading_list(action, book_id=None, book_title=None):
     
     elif action == "remove":
         if book_id and book_id in LIBRARY_DATA["reading_lists"]:
-            title = LIBRARY_DATA["reading_lists"][book_id]["title"]
             del LIBRARY_DATA["reading_lists"][book_id]
+            title = LIBRARY_DATA["books"][book_id]["title"]
             return {"success": True, "message": f"Removed '{title}' from reading list"}
-        else:
-            return {"success": False, "message": "Book not found in reading list"}
+        if book_title:
+            for bid, book in LIBRARY_DATA["reading_lists"].items():
+                if book_title.lower() in book["title"].lower():
+                    del LIBRARY_DATA["reading_lists"][bid]
+                    return {"success": True, "message": f"Removed '{book['title']}' from reading list"}
+        return {"success": False, "message": "Book not found in reading list"}
     
     elif action == "view":
         books = list(LIBRARY_DATA["reading_lists"].values())
@@ -166,7 +173,7 @@ def track_reading(book_id, status, pages_read=None, rating=None):
             message += f" with {rating} stars"
     else:
         message = f"Updated '{book_title}' status to {status}"
-        if pages_read:
+        if pages_read is not None:
             total_pages = LIBRARY_DATA["books"][book_id]["pages"]
             progress = (pages_read / total_pages) * 100
             message += f" ({pages_read}/{total_pages} pages, {progress:.1f}% complete)"

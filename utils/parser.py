@@ -1,4 +1,43 @@
+import json
 import re
+
+
+_FUNCTION_CALL_PATTERN = re.compile(r"CALL_FUNCTION:([A-Za-z_][A-Za-z0-9_]*):(.*)")
+
+
+def _split_parameters(parameters_text):
+    """Split parameters on commas outside JSON arrays and quoted strings."""
+    parts = []
+    start = 0
+    bracket_depth = 0
+    in_quotes = False
+    escaped = False
+
+    for index, character in enumerate(parameters_text):
+        if in_quotes:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_quotes = False
+        elif character == '"':
+            in_quotes = True
+        elif character == "[":
+            bracket_depth += 1
+        elif character == "]":
+            bracket_depth -= 1
+            if bracket_depth < 0:
+                raise ValueError("Unexpected closing bracket")
+        elif character == "," and bracket_depth == 0:
+            parts.append(parameters_text[start:index].strip())
+            start = index + 1
+
+    if in_quotes or bracket_depth != 0:
+        raise ValueError("Unterminated quoted value or array")
+
+    parts.append(parameters_text[start:].strip())
+    return parts
 
 def parse_function_call(text):
     """
@@ -10,23 +49,42 @@ def parse_function_call(text):
     Returns:
         tuple: (function_name, parameters) or (None, None) if no function call found
     """
-    # TODO: Define regex pattern to match CALL_FUNCTION format
-    
-    # TODO: Search for the pattern in the text
-    
-    # TODO: If no match found, return None, None
-    
-    # TODO: Extract function name from the match
-    
-    # TODO: Extract parameters string from the match
-    
-    # TODO: Parse parameters string into a dictionary
-    # Handle simple arrays: ["item1", "item2"]
-    # Handle optional parameters with defaults
-    
-    # TODO: Return function_name and parameters dictionary
-    
-    pass
+    if not isinstance(text, str):
+        return None, None
+
+    match = _FUNCTION_CALL_PATTERN.fullmatch(text.strip())
+    if match is None:
+        return None, None
+
+    function_name, parameters_text = match.groups()
+    parameters = {}
+    if not parameters_text.strip():
+        return function_name, parameters
+
+    try:
+        for item in _split_parameters(parameters_text):
+            if not item or "=" not in item:
+                return None, None
+
+            name, value = item.split("=", 1)
+            name = name.strip()
+            value = value.strip()
+            if not name or not value or name in parameters:
+                return None, None
+
+            if value.startswith("["):
+                parameters[name] = parse_array_parameter(value)
+            elif value.startswith('"'):
+                decoded_value = json.loads(value)
+                if not isinstance(decoded_value, str):
+                    return None, None
+                parameters[name] = decoded_value
+            else:
+                parameters[name] = value
+    except (ValueError, json.JSONDecodeError):
+        return None, None
+
+    return function_name, parameters
 
 def parse_array_parameter(param_str):
     """
@@ -38,12 +96,17 @@ def parse_array_parameter(param_str):
     Returns:
         list: Parsed array
     """
-    # TODO: Check if parameter looks like an array
-    
-    # TODO: Remove brackets and quotes
-    
-    # TODO: Split by comma and clean up items
-    
-    # TODO: Return as list
-    
-    pass
+    if isinstance(param_str, list):
+        values = param_str
+    elif isinstance(param_str, str):
+        try:
+            values = json.loads(param_str.strip())
+        except json.JSONDecodeError as error:
+            raise ValueError("Array parameters must use JSON array syntax") from error
+    else:
+        raise ValueError("Array parameters must be a JSON array")
+
+    if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+        raise ValueError("Array parameters must contain only strings")
+
+    return values
