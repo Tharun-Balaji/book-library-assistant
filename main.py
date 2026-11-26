@@ -163,7 +163,7 @@ class LibraryAssistant:
                     _format_book(LIBRARY_DATA["books"][book_id], book_id)
                 )
             return (
-                f"Recommended {result['count']} book(s):\n\n"
+                f"Book recommendations ({result['count']}):\n\n"
                 + "\n\n".join(details)
             )
 

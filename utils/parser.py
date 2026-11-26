@@ -79,6 +79,8 @@ def parse_function_call(text):
                 if not isinstance(decoded_value, str):
                     return None, None
                 parameters[name] = decoded_value
+            elif re.fullmatch(r"-?\d+", value):
+                parameters[name] = int(value)
             else:
                 parameters[name] = value
     except (ValueError, json.JSONDecodeError):
